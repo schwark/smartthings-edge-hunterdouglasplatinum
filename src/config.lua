@@ -10,4 +10,5 @@ config.SCHEDULE_PERIOD=30
 config.KEEP_ALIVE_PERIOD=300
 config.MANUFACTURER='Hunter Douglas' 
 config.MODEL='Platinum'
+config.REFRESH_MAX_FREQUENCY = 60
 return config

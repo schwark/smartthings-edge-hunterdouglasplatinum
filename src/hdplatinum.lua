@@ -4,6 +4,7 @@ local socket = cosock.socket
 local utils = require("st.utils")
 local log = require "log"
 local math = require ('math')
+local config = require('config')
 
 local commands = { 
     update = {{ command = "$dat", sentinel = "upd01-"}},
@@ -29,8 +30,6 @@ local M = {}; M.__index = M
 M.FEATURES = {
     shade = '04'
 }
-M.REFRESH_MAX_FREQUENCY = 100
-
 
 function M:ensure_tcp(command, params)
     local tries = 2
@@ -244,7 +243,7 @@ function M:ping()
 end
 
 function M:should_update()
-    if self.last_refresh and (os.time() - self.last_refresh < self.REFRESH_MAX_FREQUENCY) then
+    if self.last_refresh and (os.time() - self.last_refresh < config.REFRESH_MAX_FREQUENCY) then
         return false
     end
     return true
