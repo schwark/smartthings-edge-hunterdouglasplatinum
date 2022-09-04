@@ -1,6 +1,7 @@
 local log = require "log"
 local capabilities = require "st.capabilities"
 local PlatinumGateway = require("hdplatinum")
+local config = require ("config")
 local discovery = require("discovery")
 
 local command_handlers = {}
@@ -33,7 +34,7 @@ local function get_shade_state(level)
     return state
 end
 
-function command_handlers.handle_scene_command(driver, device, command)
+function command_handlers.do_scene(driver, device, command)
     log.info("Sending exec command to "..device.label)
     local hub = assert(command_handlers.get_hub(driver, device))
     local success = false
@@ -48,7 +49,7 @@ function command_handlers.handle_scene_command(driver, device, command)
     return success
 end
 
-function command_handlers.handle_shade_command(driver, device, command)
+function command_handlers.do_shade(driver, device, command)
     log.info("Sending "..command.command.." command to "..device.label)
     local hub = assert(command_handlers.get_hub(driver, device))
     local success = false
@@ -73,6 +74,27 @@ function command_handlers.handle_shade_command(driver, device, command)
     else
         log.error("command "..type.." failed")
     end
+end
+
+local function retry_enabled_command(name, driver, device, command)
+    local retry = config[name:upper()..'_RETRY_DELAY'] 
+    if retry then
+        local num_retries = config[name:upper()..'_NUM_RETRIES'] or 1
+        for i=1,num_retries,1 do
+            log.info("setting up retry of "..name.." command after "..tostring(retry*i).." seconds...")
+            --device.thread:call_with_delay(retry*i, function() command_handlers["do_"..name](driver, device, command) end)
+        end
+    end
+    log.info("trying command .. "..name)
+    return command_handlers["do_"..name](driver, device, command)
+end
+
+function command_handlers.handle_scene_command(driver, device, command)
+    return retry_enabled_command('scene', driver, device, command)
+end
+
+function command_handlers.handle_shade_command(driver, device, command)
+    return retry_enabled_command('shade', driver, device, command)
 end
 
 function command_handlers.handle_refresh(driver, device)

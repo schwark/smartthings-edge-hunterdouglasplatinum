@@ -11,4 +11,5 @@ config.KEEP_ALIVE_PERIOD=300
 config.MANUFACTURER='Hunter Douglas' 
 config.MODEL='Platinum'
 config.REFRESH_MAX_FREQUENCY = 60
+config.SCENE_RETRY_DELAY = 5
 return config
