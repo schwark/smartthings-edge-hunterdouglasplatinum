@@ -1,8 +1,7 @@
 local log = require "log"
 local config = require("config")
-local socket = require('socket')
 local PlatinumGateway = require("hdplatinum")
-local utils = require('st.utils')
+local utils = require("st.utils")
 local discovery = {}
 
 function discovery.get_model(type)
@@ -32,6 +31,7 @@ local function create_device(driver, device)
     model = model,
     vendor_provided_label = network_id
   }
+  log.info("creating device with metadata "..utils.stringify_table(metadata))
   return driver:try_create_device(metadata)
 end
 
@@ -42,16 +42,18 @@ function discovery.start(driver, opts, cons)
       local shades, rooms, scenes = hub:update()
       if shades then
         for id, shade in pairs(shades) do
-          local meta = {id = id, name = shade.name, type = 'Shade'}
-          create_device(driver, meta)
-          break
+          if (shade.name and shade.name:match('Master')) then
+            local meta = {id = id, name = shade.name, type = 'Shade'}
+            create_device(driver, meta)
+          end
         end
       end
       if scenes then
         for id, scene in pairs(scenes) do
-          local meta = {id = id, name = scene.name, type = 'Scene'}
-          create_device(driver, meta)
-          break
+          if (scene.name and scene.name:match('Master')) then
+            local meta = {id = id, name = scene.name, type = 'Scene'}
+            create_device(driver, meta)
+          end
         end
       end
       hub:close()

@@ -1,13 +1,14 @@
 local cosock = require "cosock"
 local socket = cosock.socket
+--local socket = require "socket"
 local utils = require("st.utils")
 local log = require "log"
 local math = require ('math')
 
 local commands = { 
     update = {{ command = "$dat", sentinel = "upd01-"}},
-    move = {{ command = "$pss%(id)-%(feature)-%(level)03d%", sentinel = "done"}, {command = "$rls", sentinel = "act00-00-"}},
-    exec = {{ command = "$inm%(id)-", sentinel = "act00-00-"}},
+    move = {{ command = "$pss%(id)s-%(feature)s-%(level)03d%", sentinel = "done"}, {command = "$rls", sentinel = "act00-00-"}},
+    exec = {{ command = "$inm%(id)s-", sentinel = "act00-00-"}},
     ping = {{ command = "$dmy", sentinel = "ack"}}
 }
 
@@ -91,7 +92,7 @@ local function netbios_lookup(name)
     local nbns_suffix = "\x00\x20\x00\x01"
     local broadcast_addr = "255.255.255.255"
     local nbns_port = 137
-    local ip = ""
+    local ip = nil
     local response, port
     local udp = socket.udp()
     udp:setoption("broadcast", true)
@@ -102,7 +103,11 @@ local function netbios_lookup(name)
     udp:sendto(query, broadcast_addr, nbns_port)
     --udp:send(query)
     response, ip, port = udp:receivefrom()
-    log.info("NetBios response received from "..ip)
+    if "timeout" ~= ip and "closed" ~= ip then
+        log.info("NetBios response received from "..ip)
+    else
+        ip = nil
+    end
     udp:close()
     return ip
 end
@@ -152,9 +157,9 @@ function M:ensure_connection()
 end
 
 function M:handle_error(err)
-    log.info("handling error "..err)
     local result = false
     if err and (err == "timeout" or err == "closed") then
+        log.info("handling error "..err)
         self:close()
         self:connect()
         result = true
@@ -167,7 +172,7 @@ function M:read_till (sentinel)
     local err = nil
     sentinel = sentinel .. "\n"
     repeat
-        log.info("receiving back...")
+        --log.info("receiving back...")
             local ok, s, status, partial = pcall(function (tcp)
                 return tcp:receive()
             end, self.tcp)
@@ -178,8 +183,10 @@ function M:read_till (sentinel)
                 else
                     local txt = s or partial
                     if txt then
-                        log.info("received "..tostring(txt))
-                        result = result .. txt .. "\n"
+                        if ("$ctb" ~= txt:sub(3,6)) then
+                            --log.info("received "..tostring(txt))
+                            result = result .. txt .. "\n"                            
+                        end
                     end
                 end
             else
@@ -213,8 +220,9 @@ function M:cmd(command, params)
     --assert(self:ensure_connection())
     local result = ""
     for index, value in ipairs(command) do
-        log.info("here we go - send_cmd "..value.command)
-        local response, err = self:send_cmd(value.command % params, value.sentinel)
+        local msg = value.command % params
+        log.info("here we go - send_cmd "..msg)
+        local response, err = self:send_cmd(msg, value.sentinel)
         log.info("send_cmd response is "..(response or "nil"))
         self:handle_error(err)
         result = result .. (response or "")

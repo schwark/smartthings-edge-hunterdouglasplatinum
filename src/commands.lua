@@ -13,7 +13,7 @@ function command_handlers.get_hub(driver, device)
         local hub_ip = hub:discover()            
         if hub_ip then
             local devices = driver:get_devices()
-            for each in ipairs(devices) do
+            for i, each in ipairs(devices) do
                 each:set_field("hub", hub)
             end
         else
@@ -64,7 +64,7 @@ function command_handlers.handle_shade_command(driver, device, command)
     local state = get_shade_state(level)
     if hub then
         local id = discovery.extract_id(device.device_network_id)
-        success = hub:move_shade(id, command.shadeLevel)
+        success = hub:move_shade(id, level)
     end
     if success then   
         device:emit_event(capabilities.windowShade.windowShade[state.state]())
