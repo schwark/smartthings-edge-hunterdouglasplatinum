@@ -5,7 +5,7 @@ local utils = require("st.utils")
 local discovery = {}
 
 function discovery.get_model(type)
-  return config.MODEL..' '..type
+  return config.MODEL..' '..utils.pascal_case(type)
 end
 
 function discovery.get_network_id(type, id)
@@ -13,7 +13,7 @@ function discovery.get_network_id(type, id)
 end
 
 function discovery.extract_id(network_id)
-  return network_id:match('%s(%d+)$')
+  return network_id:match('[%s_](%d+)$')
 end
 
 local function create_device(driver, device)
@@ -43,7 +43,7 @@ function discovery.start(driver, opts, cons)
       if shades then
         for id, shade in pairs(shades) do
           if (shade.name and shade.name:match('Master')) then
-            local meta = {id = id, name = shade.name, type = 'Shade'}
+            local meta = {id = id, name = shade.name, type = 'shade'}
             create_device(driver, meta)
           end
         end
@@ -51,7 +51,7 @@ function discovery.start(driver, opts, cons)
       if scenes then
         for id, scene in pairs(scenes) do
           if (scene.name and scene.name:match('Master')) then
-            local meta = {id = id, name = scene.name, type = 'Scene'}
+            local meta = {id = id, name = scene.name, type = 'scene'}
             create_device(driver, meta)
           end
         end

@@ -17,6 +17,7 @@ function command_handlers.get_hub(driver, device)
                 each:set_field("hub", hub)
             end
         else
+            hub = nil
             log.error("unable to initialize hub")
         end
     end
@@ -76,26 +77,35 @@ end
 
 function command_handlers.handle_refresh(driver, device)
     log.info("Sending refresh command to "..device.label)
-    local hub = assert(command_handlers.get_hub(driver, device))
-    if not hub:should_update() then
-        log.info("Update not needed right now...")
-        return
-    end
-    local shades, rooms, scenes = hub:update()
-    if shades then
-        local devices = driver:get_devices()
-        local shade_model = discovery.get_model('shade')
-        for _, each in ipairs(devices) do
-            if shade_model == each.model then
-                local id = discovery.extract_id(each.device_network_id)
-                local level = shades[id]['position']
-                local state = get_shade_state(level)
-                each:emit_event(capabilities.windowShade.windowShade[state.state]())
-                each:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
+    local shade_model = discovery.get_model('shade')
+    local scene_model = discovery.get_model('scene')
+
+    if(shade_model == device.model) then
+        local hub = assert(command_handlers.get_hub(driver, device))
+        if not hub:should_update() then
+            log.info("Update not needed right now...")
+            return
+        end
+        local shades, rooms, scenes = hub:update()
+        if shades then
+            local devices = driver:get_devices()
+            for _, each in ipairs(devices) do
+                if shade_model == each.model then
+                    local id = discovery.extract_id(each.device_network_id)
+                    log.info("shade id is "..(id or "nil").." for network id "..each.device_network_id)
+                    local level = assert(shades[id]).position
+                    local state = get_shade_state(level)
+                    each:emit_event(capabilities.windowShade.windowShade[state.state]())
+                    each:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
+                end
             end
+        else
+            log.error("refresh failed")
         end
     else
-        log.error("refresh failed")
+        -- scene device
+        assert(device.model == scene_model)
+        device:emit_event(capabilities.switch.switch.off())
     end
 end
 

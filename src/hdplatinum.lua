@@ -115,11 +115,13 @@ end
 function M:connect()
     local result = nil
     local err = nil
-    self.tcp:connect(self.ip, self.port) 
-    result, err = self:read_till("Shade Controller")
-    if not err then
-        log.info("connected to hub...")
-        self.connected = true
+    if not self.connected then
+        self.tcp:connect(self.ip, self.port) 
+        result, err = self:read_till("Shade Controller")
+        if not err then
+            log.info("connected to hub...")
+            self.connected = true
+        end
     end
     return self.connected
 end
@@ -141,6 +143,7 @@ function M:discover()
             self.connected = false
         end
         self.ip = hub_ip
+        self:connect()
         return true
     end
     return false
@@ -197,21 +200,28 @@ function M:read_till (sentinel)
 end
 
 function M:send_cmd(command, sentinel)
-    self:connect()
     log.info("sending "..command)
-    local result, err = self.tcp:send(command)
-    log.info("got result "..(result or "nil"))
-    log.info("with error "..(err or "nil"))
-    if not err then
-        result, err = self:read_till(sentinel)
+    local result = nil
+    local err = nil
+    for i=1,2,1 do
+        result, err = self.tcp:send(command)
+        log.info("got result "..(result or "nil"))
+        log.info("with error "..(err or "nil"))
+        if not err then
+            result, err = self:read_till(sentinel)
+            if not err then
+                break
+            end
+        end
+        if err then
+            self:handle_error(err)
+        end
     end
-    self:close()
     return result, err
 end
 
 function M:cmd(command, params)
     log.info("platinum cmd sending "..command)
-
     params = params or {}
     command = self.commands[command] or {}
     if next(command) == nil then
@@ -224,7 +234,6 @@ function M:cmd(command, params)
         log.info("here we go - send_cmd "..msg)
         local response, err = self:send_cmd(msg, value.sentinel)
         log.info("send_cmd response is "..(response or "nil"))
-        self:handle_error(err)
         result = result .. (response or "")
     end
     return result ~= '', result
@@ -262,13 +271,20 @@ function M:update()
             local id = line:sub(6,7)
             local name = line:match('-([%w ]+)$')
             local room_id = line:match('-([%d]+)-')
-            shades[id] = {name = name, room = room_id}
+            if not shades[id] then
+                shades[id] = {}
+            end
+            shades[id].name = name
+            shades[id].room = room_id
         end,
         p = function(line)
             local id = line:sub(6,7)
             local feature = line:sub(9,10)
             local state = tonumber(line:sub(-4,-2))
-            shades[id]['position'] = math.floor(state*100/255+0.5) -- stored as percent
+            if not shades[id] then
+                shades[id] = {}
+            end
+            shades[id].position = math.floor(state*100/255+0.5) -- stored as percent
         end
     }
 
