@@ -6,11 +6,11 @@ local utils = require('st.utils')
 local discovery = {}
 
 function discovery.get_model(type)
-  return config.MODEL..' '..utils.pascal_case(type)
+  return config.MODEL..' '..type
 end
 
 function discovery.get_network_id(type, id)
-  return utils.screaming_snake_case(discovery.get_model(type)..' '..id)
+  return discovery.get_model(type)..' '..id
 end
 
 function discovery.extract_id(network_id)
