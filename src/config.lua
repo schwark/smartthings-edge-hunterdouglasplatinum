@@ -12,4 +12,6 @@ config.MANUFACTURER='Hunter Douglas'
 config.MODEL='Platinum'
 config.REFRESH_MAX_FREQUENCY = 60
 config.SCENE_RETRY_DELAY = 5
+config.SCENE_FILTER = 'Master'
+config.SHADE_FILTER = 'Master'
 return config

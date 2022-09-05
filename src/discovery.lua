@@ -42,7 +42,7 @@ function discovery.start(driver, opts, cons)
       local shades, rooms, scenes = hub:update()
       if shades then
         for id, shade in pairs(shades) do
-          if (shade.name and shade.name:match('Master')) then
+          if (shade.name and shade.name:match(config.SHADE_FILTER)) then
             local meta = {id = id, name = shade.name, type = 'shade'}
             create_device(driver, meta)
           end
@@ -50,7 +50,7 @@ function discovery.start(driver, opts, cons)
       end
       if scenes then
         for id, scene in pairs(scenes) do
-          if (scene.name and scene.name:match('Master')) then
+          if (scene.name and scene.name:match(config.SCENE_FILTER)) then
             local meta = {id = id, name = scene.name, type = 'scene'}
             create_device(driver, meta)
           end
