@@ -31,32 +31,15 @@ M.FEATURES = {
     shade = '04'
 }
 
-function M:ensure_tcp(command, params)
-    local tries = 2
-    local err = ""
-    local result = nil
-
-    while (tries > 0 and err) do
-        if err and (err == "closed" or err == "timeout") then
-            log.info("error with connxn "..err)
-            self:close()
-            self:connect()
-        end
-        result, err = self.tcp[command](self.tcp, params)
-        tries = tries - 1
-    end
-
-    return result, err
-end
-
 local function constructor(self,o)
     o = o or {}
     o.ip = o.ip or "127.0.0.1"
     o.port = o.port or 522
-    o.tcp = assert(socket.tcp())
+    o.tcp = socket.tcp()
     o.connected = false
     o.commands = commands
     o.last_refresh = nil
+    o.in_command = false
     setmetatable(o, M)
     return o
 end
@@ -115,7 +98,9 @@ function M:connect()
     local result = nil
     local err = nil
     if not self.connected then
+        log.info("connecting to hub...")
         self.tcp:connect(self.ip, self.port) 
+        self.tcp:settimeout(0.001)
         result, err = self:read_till("Shade Controller")
         if not err then
             log.info("connected to hub...")
@@ -125,8 +110,10 @@ function M:connect()
     return self.connected
 end
 
-function M:close() 
-    self.tcp:close() 
+function M:close()
+    if self.tcp and self.tcp.close then
+        self.tcp:close() 
+    end
     self.connected = false
 end
 
@@ -148,23 +135,28 @@ function M:discover()
     return false
 end
 
-function M:ensure_connection()
-    if not self.ip or self.ip == "" then
-        self:discover()
+function M:drain()
+    if self.connected then
+        local s, status, partial
+        repeat
+            s, status, partial = self.tcp:receive()
+            log.info("draining "..(s or "nil"))
+        until status
+        self.tcp:settimeout(nil)
     end
-    if self.ip and not self.connected then
-        self:connect()        
-    end
-    return self.ip and self.connected
 end
 
 function M:handle_error(err)
     local result = false
-    if err and (err == "timeout" or err == "closed") then
+    if err and (err == "closed") then
         log.info("handling error "..err)
         self:close()
+        log.info("closed socket "..err)
         self:connect()
+        log.info("reconnected socket "..err)
+        self:drain()
         result = true
+        log.info("handled error "..err)
     end
     return result
 end
@@ -194,7 +186,7 @@ function M:read_till (sentinel)
             else
                 log.error("error in receive "..s)
             end
-    until ends_with(result, sentinel)
+    until err or ends_with(result, sentinel)
     return result, err
 end
 
@@ -204,10 +196,10 @@ function M:send_cmd(command, sentinel)
     local err = nil
     for i=1,2,1 do
         result, err = self.tcp:send(command)
-        log.info("got result "..(result or "nil"))
-        log.info("with error "..(err or "nil"))
+        log.info("command send error is "..(err or "nil"))
         if not err then
             result, err = self:read_till(sentinel)
+            log.info("command read error is "..(err or "nil"))
             if not err then
                 break
             end
@@ -219,27 +211,43 @@ function M:send_cmd(command, sentinel)
     return result, err
 end
 
+function M:get_ticket()
+    if self.in_command then
+        log.info("Waiting for my turn...")
+        while self.in_command do
+            socket.sleep(0.01)
+        end            
+        log.info("Got my turn...")
+    end
+    self.in_command = true
+end
+
+function M:close_ticket()
+    self.in_command = false
+end
+
 function M:cmd(command, params)
+    self:get_ticket()
     log.info("platinum cmd sending "..command)
     params = params or {}
     command = self.commands[command] or {}
     if next(command) == nil then
         return
     end
-    --assert(self:ensure_connection())
     local result = ""
     for index, value in ipairs(command) do
         local msg = value.command % params
         log.info("here we go - send_cmd "..msg)
         local response, err = self:send_cmd(msg, value.sentinel)
-        log.info("send_cmd response is "..(response or "nil"))
+        log.info("send_cmd err is "..(err or "nil"))
         result = result .. (response or "")
     end
+    self:close_ticket()
     return result ~= '', result
 end
 
 function M:ping()
-    return assert(self:cmd("ping"))
+    return self:cmd("ping")
 end
 
 function M:should_update()
@@ -250,8 +258,6 @@ function M:should_update()
 end
 
 function M:update()
-    self.last_refresh = os.time()
-
     local shades = {}
     local rooms = {}
     local scenes = {}
@@ -289,14 +295,15 @@ function M:update()
 
     local success, response = self:cmd("update")
     if response then
+        self.last_refresh = os.time()
         for s in response:gmatch("[^\r\n]+") do
             local kind = s:match('^%d $c([rmsp])')
             if(kind) then parsers[kind](s) end
         end
+        log.info("finished update...")
     end 
 
     --log.info(utils.stringify_table(shades, "shades"))
-    log.info("finished update...")
     --log.info(utils.stringify_table(rooms, "rooms"))
     --log.info(utils.stringify_table(scenes, "scenes"))
 

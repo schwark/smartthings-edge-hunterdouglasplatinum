@@ -90,10 +90,12 @@ local function retry_enabled_command(name, driver, device, command)
 end
 
 function command_handlers.handle_scene_command(driver, device, command)
+    log.info("in scene command")
     return retry_enabled_command('scene', driver, device, command)
 end
 
 function command_handlers.handle_shade_command(driver, device, command)
+    log.info("in shade command")
     return retry_enabled_command('shade', driver, device, command)
 end
 
