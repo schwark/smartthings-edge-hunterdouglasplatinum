@@ -6,11 +6,38 @@ local discovery = require("discovery")
 
 local command_handlers = {}
 
+function command_handlers.set_timer(driver, device, hub)
+    local has_timer = false
+    local devices = driver:get_devices()
+    local scene_model = discovery.get_model('scene')
+    for i, each in ipairs(devices) do
+        if each:get_field("refresh_timer") then 
+            log.info("refresh timer already set on "..each.label)
+            has_timer = true
+            break 
+        end
+    end
+    if not has_timer then
+        local i, each = next(devices)
+        each:set_field("refresh_timer", true)
+        log.info("setting refresh timer on "..each.label)
+        -- Refresh schedule
+        each.thread:call_on_schedule(
+            config.SCHEDULE_PERIOD,
+            function ()
+                return command_handlers.handle_refresh(driver, each)
+            end,
+            'Refresh schedule')   
+    end
+        
+end
+
 function command_handlers.get_hub(driver, device)
     local hub = device:get_field("hub")
     if not hub then
         log.info("initializing hub device "..device.label)
-        hub = PlatinumGateway()
+        hub = PlatinumGateway.get_instance()
+        log.info(device.label.." hub id "..hub.id)
         local hub_ip = hub:discover()            
         if hub_ip then
             local devices = driver:get_devices()
@@ -32,6 +59,13 @@ local function get_shade_state(level)
         state = {state = 'partially_open'}
     end
     return state
+end
+
+function command_handlers.handle_added(driver, device)
+    local scene_model = discovery.get_model('scene')
+    if device.model == scene_model then
+      device:emit_event(capabilities.switch.switch.off())        
+    end
 end
 
 function command_handlers.do_scene(driver, device, command)
@@ -102,34 +136,20 @@ end
 function command_handlers.handle_refresh(driver, device)
     log.info("Sending refresh command to "..device.label)
     local shade_model = discovery.get_model('shade')
-    local scene_model = discovery.get_model('scene')
 
-    if(shade_model == device.model) then
-        local hub = assert(command_handlers.get_hub(driver, device))
-        if not hub:should_update() then
-            log.info("Update not needed right now...")
-            return
-        end
-        local shades, rooms, scenes = hub:update()
-        if shades then
-            local devices = driver:get_devices()
-            for _, each in ipairs(devices) do
-                if shade_model == each.model then
-                    local id = discovery.extract_id(each.device_network_id)
-                    log.info("shade id is "..(id or "nil").." for network id "..each.device_network_id)
-                    local level = assert(shades[id]).position
-                    local state = get_shade_state(level)
-                    each:emit_event(capabilities.windowShade.windowShade[state.state]())
-                    each:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
-                end
+    local hub = assert(command_handlers.get_hub(driver, device))
+    local shades, rooms, scenes = hub:update()
+    if shades and next(shades) ~= nil then
+        local devices = driver:get_devices()
+        for _, each in ipairs(devices) do
+            if shade_model == each.model then
+                local id = discovery.extract_id(each.device_network_id)
+                local level = assert(shades[id]).position
+                local state = get_shade_state(level)
+                each:emit_event(capabilities.windowShade.windowShade[state.state]())
+                each:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
             end
-        else
-            log.error("refresh failed")
         end
-    else
-        -- scene device
-        assert(device.model == scene_model)
-        device:emit_event(capabilities.switch.switch.off())
     end
 end
 

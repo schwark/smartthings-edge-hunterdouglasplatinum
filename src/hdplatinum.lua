@@ -35,15 +35,25 @@ local function constructor(self,o)
     o = o or {}
     o.ip = o.ip or "127.0.0.1"
     o.port = o.port or 522
-    o.tcp = socket.tcp()
+    o.tcp = nil
     o.connected = false
     o.commands = commands
-    o.last_refresh = nil
+    o.last = {update = 0}
     o.in_command = false
+    o.id = math.random(1000000) 
+    o.min_id = config.MAX_ID
     setmetatable(o, M)
     return o
 end
 setmetatable(M, {__call = constructor})
+
+
+function M.get_instance()
+    if not M._instance then
+        M._instance = M()
+    end
+    return M._instance
+end
 
 local function netbios_encode(name, type)
     local result = ""
@@ -94,18 +104,27 @@ local function netbios_lookup(name)
     return ip
 end
 
-function M:connect()
+function M:connect(ticket)
     local result = nil
     local err = nil
+    local ticket = ticket or false
+    if not ticket then
+        self:get_ticket()        
+    end
     if not self.connected then
         log.info("connecting to hub...")
+        self.tcp = assert(socket.tcp())
         self.tcp:connect(self.ip, self.port) 
-        self.tcp:settimeout(0.001)
+        self.tcp:settimeout(2)
         result, err = self:read_till("Shade Controller")
         if not err then
             log.info("connected to hub...")
             self.connected = true
+            self:drain()
         end
+    end
+    if not ticket then
+        self:close_ticket()        
     end
     return self.connected
 end
@@ -142,19 +161,18 @@ function M:drain()
             s, status, partial = self.tcp:receive()
             log.info("draining "..(s or "nil"))
         until status
-        self.tcp:settimeout(nil)
     end
 end
 
-function M:handle_error(err)
+function M:handle_error(err, ticket)
     local result = false
+    local ticket = ticket or false
     if err and (err == "closed") then
         log.info("handling error "..err)
         self:close()
-        log.info("closed socket "..err)
-        self:connect()
+        log.info("closed socket for error "..err)
+        self:connect(ticket)
         log.info("reconnected socket "..err)
-        self:drain()
         result = true
         log.info("handled error "..err)
     end
@@ -171,8 +189,8 @@ function M:read_till (sentinel)
                 return tcp:receive()
             end, self.tcp)
             if ok then
-                if status == "closed" then
-                    log.info("connxn closed...")
+                if status == "closed" or status == "timeout" then
+                    log.info("read_till error "..status)
                     err = status 
                 else
                     local txt = s or partial
@@ -205,7 +223,7 @@ function M:send_cmd(command, sentinel)
             end
         end
         if err then
-            self:handle_error(err)
+            self:handle_error(err, true)
         end
     end
     return result, err
@@ -227,40 +245,43 @@ function M:close_ticket()
 end
 
 function M:cmd(command, params)
-    self:get_ticket()
-    log.info("platinum cmd sending "..command)
-    params = params or {}
-    command = self.commands[command] or {}
-    if next(command) == nil then
-        return
-    end
     local result = ""
-    for index, value in ipairs(command) do
-        local msg = value.command % params
-        log.info("here we go - send_cmd "..msg)
-        local response, err = self:send_cmd(msg, value.sentinel)
-        log.info("send_cmd err is "..(err or "nil"))
-        result = result .. (response or "")
+    local response, err
+    self:get_ticket()
+    local frequency = config[command:upper().."_MAX_FREQUENCY"] or 0
+    if os.time() - self.last[command] > frequency then
+        self.last[command] = os.time()
+        log.info("platinum cmd sending "..command)
+        params = params or {}
+        command = self.commands[command] or {}
+        if next(command) == nil then
+            return
+        end
+        for index, value in ipairs(command) do
+            local msg = value.command % params
+            log.info("here we go - send_cmd "..msg)
+            response, err = self:send_cmd(msg, value.sentinel)
+            log.info("send_cmd err is "..(err or "nil"))
+            log.info("send_cmd response is \n"..((response and response:sub(1,10)) or "nil").."\n")
+            result = result .. (response or "")
+        end
+    else
+        log.info("skipping "..command.." due to frequency")
     end
     self:close_ticket()
-    return result ~= '', result
+    return result, err
 end
 
 function M:ping()
     return self:cmd("ping")
 end
 
-function M:should_update()
-    if self.last_refresh and (os.time() - self.last_refresh < config.REFRESH_MAX_FREQUENCY) then
-        return false
-    end
-    return true
-end
-
 function M:update()
+    self.last_refresh = os.time()
     local shades = {}
     local rooms = {}
     local scenes = {}
+    local min_id = config.MAX_ID
     local parsers = {
         r = function(line)
             local id = line:sub(6,7)
@@ -279,6 +300,9 @@ function M:update()
             if not shades[id] then
                 shades[id] = {}
             end
+            if (tonumber(id) < min_id) then
+                min_id = tonumber(id)
+            end
             shades[id].name = name
             shades[id].room = room_id
         end,
@@ -293,20 +317,28 @@ function M:update()
         end
     }
 
-    local success, response = self:cmd("update")
-    if response then
-        self.last_refresh = os.time()
+    local response, err = self:cmd("update")
+    local parsed = false
+    if not err and response then
         for s in response:gmatch("[^\r\n]+") do
             local kind = s:match('^%d $c([rmsp])')
-            if(kind) then parsers[kind](s) end
+            if(kind) then 
+                parsed = true
+                parsers[kind](s) 
+            end
         end
-        log.info("finished update...")
     end 
+    if parsed then
+        self.min_id = min_id            
+        log.info("finished update...")
+    else
+        if err then log.error("update failed") end
+    end
 
     --log.info(utils.stringify_table(shades, "shades"))
     --log.info(utils.stringify_table(rooms, "rooms"))
     --log.info(utils.stringify_table(scenes, "scenes"))
-
+    
     return shades, rooms, scenes
 end
 

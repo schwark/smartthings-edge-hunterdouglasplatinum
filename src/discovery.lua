@@ -36,8 +36,9 @@ local function create_device(driver, device)
 end
 
 function discovery.start(driver, opts, cons)
-  local hub = PlatinumGateway()
- if(hub:discover()) then
+  local hub = PlatinumGateway.get_instance()
+  log.info("discovery hub id "..hub.id)
+  if(hub:discover()) then
       log.info('===== Platinum Gateway found at: '..hub.ip)
       local shades, rooms, scenes = hub:update()
       if shades then
