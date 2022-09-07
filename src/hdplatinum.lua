@@ -115,7 +115,7 @@ function M:connect(ticket)
         log.info("connecting to hub...")
         self.tcp = assert(socket.tcp())
         self.tcp:connect(self.ip, self.port) 
-        self.tcp:settimeout(2)
+        self.tcp:settimeout(5)
         result, err = self:read_till("Shade Controller")
         if not err then
             log.info("connected to hub...")
@@ -248,25 +248,30 @@ function M:cmd(command, params)
     local result = ""
     local response, err
     self:get_ticket()
-    local frequency = config[command:upper().."_MAX_FREQUENCY"] or 0
-    if os.time() - self.last[command] > frequency then
-        self.last[command] = os.time()
-        log.info("platinum cmd sending "..command)
-        params = params or {}
-        command = self.commands[command] or {}
-        if next(command) == nil then
-            return
+    local ok, perr = pcall(function () 
+        local frequency = config[command:upper().."_MAX_FREQUENCY"] or 0
+        if not self.last[command] or (os.time() - self.last[command] > frequency) then
+            self.last[command] = os.time()
+            log.info("platinum cmd sending "..command)
+            params = params or {}
+            command = self.commands[command] or {}
+            if next(command) == nil then
+                return
+            end
+            for index, value in ipairs(command) do
+                local msg = value.command % params
+                log.info("here we go - send_cmd "..msg)
+                response, err = self:send_cmd(msg, value.sentinel)
+                log.info("send_cmd err is "..(err or "nil"))
+                log.info("send_cmd response is \n"..((response and response:sub(1,10)) or "nil").."\n")
+                result = result .. (response or "")
+            end
+        else
+            log.info("skipping "..command.." due to frequency")
         end
-        for index, value in ipairs(command) do
-            local msg = value.command % params
-            log.info("here we go - send_cmd "..msg)
-            response, err = self:send_cmd(msg, value.sentinel)
-            log.info("send_cmd err is "..(err or "nil"))
-            log.info("send_cmd response is \n"..((response and response:sub(1,10)) or "nil").."\n")
-            result = result .. (response or "")
-        end
-    else
-        log.info("skipping "..command.." due to frequency")
+    end)
+    if not ok then
+        log.error(perr)
     end
     self:close_ticket()
     return result, err
