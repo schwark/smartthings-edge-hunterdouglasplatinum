@@ -2,6 +2,7 @@ local log = require "log"
 local config = require("config")
 local PlatinumGateway = require("hdplatinum")
 local utils = require("st.utils")
+local socket = require("socket")
 local discovery = {}
 
 function discovery.get_model(type)
@@ -40,12 +41,13 @@ function discovery.start(driver, opts, cons)
   log.info("discovery hub id "..hub.id)
   if(hub:discover()) then
       log.info('===== Platinum Gateway found at: '..hub.ip)
-      local shades, rooms, scenes = hub:update()
+      local shades, rooms, scenes = hub:update({force = true})
       if shades then
         for id, shade in pairs(shades) do
           if (shade.name and shade.name:match(config.SHADE_FILTER)) then
             local meta = {id = id, name = shade.name, type = 'shade'}
             create_device(driver, meta)
+            socket.sleep(1)
           end
         end
       end
@@ -54,10 +56,10 @@ function discovery.start(driver, opts, cons)
           if (scene.name and scene.name:match(config.SCENE_FILTER)) then
             local meta = {id = id, name = scene.name, type = 'scene'}
             create_device(driver, meta)
+            socket.sleep(1)
           end
         end
       end
-      hub:close()
     else
       log.error('===== Platinum Gateway not found')
     end

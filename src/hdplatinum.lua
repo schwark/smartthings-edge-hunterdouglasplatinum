@@ -247,13 +247,13 @@ end
 function M:cmd(command, params)
     local result = ""
     local response, err
+    params = params or {}
     self:get_ticket()
     local ok, perr = pcall(function () 
         local frequency = config[command:upper().."_MAX_FREQUENCY"] or 0
-        if not self.last[command] or (os.time() - self.last[command] > frequency) then
+        if params.force or not self.last[command] or (os.time() - self.last[command] > frequency) then
             self.last[command] = os.time()
             log.info("platinum cmd sending "..command)
-            params = params or {}
             command = self.commands[command] or {}
             if next(command) == nil then
                 return
@@ -281,7 +281,7 @@ function M:ping()
     return self:cmd("ping")
 end
 
-function M:update()
+function M:update(params)
     self.last_refresh = os.time()
     local shades = {}
     local rooms = {}
@@ -322,7 +322,7 @@ function M:update()
         end
     }
 
-    local response, err = self:cmd("update")
+    local response, err = self:cmd("update", params)
     local parsed = false
     if not err and response then
         for s in response:gmatch("[^\r\n]+") do

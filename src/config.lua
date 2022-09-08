@@ -13,6 +13,6 @@ config.MODEL='Platinum'
 config.MAX_ID=10000
 config.UPDATE_MAX_FREQUENCY = 10
 config.SCENE_RETRY_DELAY = 5
-config.SCENE_FILTER = 'Master'
-config.SHADE_FILTER = 'Master'
+config.SCENE_FILTER = ''
+config.SHADE_FILTER = ''
 return config
