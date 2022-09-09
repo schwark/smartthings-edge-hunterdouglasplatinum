@@ -103,8 +103,8 @@ function command_handlers.do_shade(driver, device, command)
         success = hub:move_shade(id, level)
     end
     if success then   
-        device:emit_event(capabilities.windowShade.windowShade[state.state]())
-        device:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
+            device:emit_event(capabilities.windowShade.windowShade[state.state]())
+            device:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
     else
         log.error("command "..type.." failed")
     end
@@ -146,8 +146,12 @@ function command_handlers.handle_refresh(driver, device)
                 local id = discovery.extract_id(each.device_network_id)
                 local level = assert(shades[id]).position
                 local state = get_shade_state(level)
-                each:emit_event(capabilities.windowShade.windowShade[state.state]())
-                each:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
+                if(each:get_latest_state('main', 'windowShade', 'windowShade') ~= state.state) then
+                    each:emit_event(capabilities.windowShade.windowShade[state.state]())
+                end
+                if(each:get_latest_state('main', 'windowShadeLevel', 'shadeLevel') ~= level) then
+                    each:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
+                end        
             end
         end
     end
