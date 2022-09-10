@@ -112,15 +112,20 @@ function M:connect(ticket)
         self:get_ticket()        
     end
     if not self.connected then
+        local success
         log.info("connecting to hub...")
         self.tcp = assert(socket.tcp())
-        self.tcp:connect(self.ip, self.port) 
         self.tcp:settimeout(5)
-        result, err = self:read_till("Shade Controller")
+        success, err = self.tcp:connect(self.ip, self.port)
         if not err then
-            log.info("connected to hub...")
-            self.connected = true
-            self:drain()
+            result, err = self:read_till("Shade Controller")
+            if not err then
+                log.info("connected to hub...")
+                self.connected = true
+                self:drain()
+            end
+        else
+            log.err("connect error "..err)
         end
     end
     if not ticket then
@@ -167,13 +172,15 @@ end
 function M:handle_error(err, ticket)
     local result = false
     local ticket = ticket or false
-    if err and (err == "closed") then
-        log.info("handling error "..err)
-        self:close()
-        log.info("closed socket for error "..err)
-        self:connect(ticket)
+    if err and (err == "closed") or (err:match('socket')) then
+        repeat
+            log.info("handling error "..err)
+            self:close()
+            log.info("closed socket for error "..err)
+            result = self:connect(ticket)
+            socket.sleep(1)
+        until result
         log.info("reconnected socket "..err)
-        result = true
         log.info("handled error "..err)
     end
     return result
@@ -203,6 +210,7 @@ function M:read_till (sentinel)
                 end
             else
                 log.error("error in receive "..s)
+                err = s
             end
     until err or ends_with(result, sentinel)
     return result, err
