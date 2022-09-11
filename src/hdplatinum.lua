@@ -153,8 +153,7 @@ function M:discover()
             self.connected = false
         end
         self.ip = hub_ip
-        self:connect()
-        return true
+        return self:connect()
     end
     return false
 end
