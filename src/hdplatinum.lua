@@ -125,7 +125,7 @@ function M:connect(ticket)
                 self:drain()
             end
         else
-            log.err("connect error "..err)
+            log.error("connect error "..err)
         end
     end
     if not ticket then
@@ -221,13 +221,18 @@ function M:send_cmd(command, sentinel)
     local result = nil
     local err = nil
     for i=1,2,1 do
-        result, err = self.tcp:send(command)
-        log.info("command send error is "..(err or "nil"))
+        if not self.tcp or not self.tcp.send then
+            err = "closed"
+        end
         if not err then
-            result, err = self:read_till(sentinel)
-            log.info("command read error is "..(err or "nil"))
+            result, err = self.tcp:send(command)
+            log.info("command send error is "..(err or "nil"))
             if not err then
-                break
+                result, err = self:read_till(sentinel)
+                log.info("command read error is "..(err or "nil"))
+                if not err then
+                    break
+                end
             end
         end
         if err then
