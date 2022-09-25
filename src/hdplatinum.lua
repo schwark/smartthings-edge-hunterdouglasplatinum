@@ -240,10 +240,13 @@ end
 function M:get_ticket()
     if self.in_command then
         log.info("Waiting for my turn...")
-        while self.in_command do
-            socket.sleep(0.01)
+        local i = 0
+        local MAX_WAIT = 300
+        while self.in_command or i > MAX_WAIT do
+            socket.sleep(1)
+            i = i + 1
         end            
-        log.info("Got my turn...")
+        log.info(i > MAX_WAIT and "Overruled bad behaving thread" or "Got my turn...")
     end
     self.in_command = true
 end
