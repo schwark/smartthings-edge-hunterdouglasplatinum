@@ -1,6 +1,4 @@
 local commands = require('commands')
-local config = require('config')
-local discovery = require('discovery')
 
 local lifecycle_handler = {}
 
@@ -10,7 +8,12 @@ function lifecycle_handler.init(driver, device)
   -- services once the
   -- driver gets
   -- initialized.
-  commands.set_timer(driver, device)
+  if driver:setup_timer() then
+      assert(driver.hub)
+      if(driver.hub:discover()) then
+        commands.handle_refresh(driver)
+      end
+  end
 end
 
 function lifecycle_handler.added(driver, device)

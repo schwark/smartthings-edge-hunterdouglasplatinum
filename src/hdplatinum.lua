@@ -13,7 +13,6 @@ local commands = {
     ping = {{ command = "$dmy", sentinel = "ack"}}
 }
 
-
 local function ends_with(str, ending)
     return ending == "" or str:sub(-#ending) == ending
 end
@@ -46,14 +45,6 @@ local function constructor(self,o)
     return o
 end
 setmetatable(M, {__call = constructor})
-
-
-function M.get_instance()
-    if not M._instance then
-        M._instance = M()
-    end
-    return M._instance
-end
 
 local function netbios_encode(name, type)
     local result = ""
@@ -111,25 +102,30 @@ function M:connect(ticket)
     if not ticket then
         self:get_ticket()        
     end
-    if not self.connected then
-        local success
-        log.info("connecting to hub...")
-        self.tcp = assert(socket.tcp())
-        self.tcp:settimeout(5)
-        success, err = self.tcp:connect(self.ip, self.port)
-        if not err then
-            result, err = self:read_till("Shade Controller")
+    local ok, perr = pcall( function ()
+        if not self.connected then
+            local success
+            log.info("connecting to hub...")
+            self.tcp = assert(socket.tcp())
+            self.tcp:settimeout(5)
+            success, err = self.tcp:connect(self.ip, self.port)
             if not err then
-                log.info("connected to hub...")
-                self.connected = true
-                self:drain()
+                result, err = self:read_till("Shade Controller")
+                if not err then
+                    log.info("connected to hub...")
+                    self.connected = true
+                    self:drain()
+                end
+            else
+                log.error("connect error "..err)
             end
-        else
-            log.error("connect error "..err)
         end
+    end)
+    if not ok then
+        log.error(perr)
     end
     if not ticket then
-        self:close_ticket()        
+        self:close_ticket()
     end
     return self.connected
 end
@@ -177,7 +173,7 @@ function M:handle_error(err, ticket)
             self:close()
             log.info("closed socket for error "..err)
             result = self:connect(ticket)
-            socket.sleep(1)
+            if not result then socket.sleep(1) end
         until result
         log.info("reconnected socket "..err)
         log.info("handled error "..err)

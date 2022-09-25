@@ -1,6 +1,5 @@
 local log = require "log"
 local config = require("config")
-local PlatinumGateway = require("hdplatinum")
 local utils = require("st.utils")
 local socket = require("socket")
 local discovery = {}
@@ -37,7 +36,7 @@ local function create_device(driver, device)
 end
 
 function discovery.start(driver, opts, cons)
-  local hub = PlatinumGateway.get_instance()
+  local hub = assert(driver.hub)
   log.info("discovery hub id "..hub.id)
   if(hub:discover()) then
       log.info('===== Platinum Gateway found at: '..hub.ip)
