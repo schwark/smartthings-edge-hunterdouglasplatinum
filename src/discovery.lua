@@ -38,7 +38,7 @@ end
 function discovery.start(driver, opts, cons)
   local hub = assert(driver.hub)
   log.info("discovery hub id "..hub.id)
-  if(hub:discover()) then
+  if(hub.ip or hub:discover()) then
       log.info('===== Platinum Gateway found at: '..hub.ip)
       local shades, rooms, scenes = hub:update({force = true})
       if shades then

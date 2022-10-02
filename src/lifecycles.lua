@@ -10,8 +10,8 @@ function lifecycle_handler.init(driver, device)
   -- initialized.
   if driver:setup_timer() then
       assert(driver.hub)
-      if(driver.hub:discover()) then
-        commands.handle_refresh(driver)
+      if(driver.hub.ip or driver.hub:discover()) then
+        commands.handle_refresh_command(driver)
       end
   end
 end

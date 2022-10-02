@@ -32,7 +32,7 @@ M.FEATURES = {
 
 local function constructor(self,o)
     o = o or {}
-    o.ip = o.ip or "127.0.0.1"
+    o.ip = o.ip or nil
     o.port = o.port or 522
     o.tcp = nil
     o.connected = false
@@ -41,6 +41,7 @@ local function constructor(self,o)
     o.in_command = false
     o.id = math.random(1000000) 
     o.min_id = config.MAX_ID
+    o.mq = {}
     setmetatable(o, M)
     return o
 end
@@ -141,6 +142,7 @@ function M:discover()
     if self.ip and self.connected then
         return true
     end
+    log.debug(debug.traceback('discovering hub...'))
     local bridge_name = "PLATLINK-PDBU"
     local hub_ip = netbios_lookup(bridge_name)
     if nil ~= hub_ip then

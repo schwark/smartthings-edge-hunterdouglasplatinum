@@ -21,12 +21,49 @@ function command_handlers.handle_added(driver, device)
     end
 end
 
+function command_handlers.add_scene_command(driver, device, command)
+    log.info("Adding scene command to queue "..device.label)
+    table.insert(driver.mq, {command = command, type = 'scene', device = device})
+end
+
+function command_handlers.add_shade_command(driver, device, command)
+    log.info("Adding shade command to queue "..device.label)
+    table.insert(driver.mq, {command = command, type = 'shade', device = device})
+end
+
+function command_handlers.add_refresh_command(driver, device, command)
+    log.info("Adding refresh command to queue ")
+    table.insert(driver.mq, {command = command, type = 'refresh'})
+end
+
+function command_handlers.exec_queued_command(driver)
+    log.info('executing queued command ')
+
+    local cmd = #(driver.mq) > 0 and table.remove(driver.mq,1) or nil
+    if not cmd then
+        if not driver.driver_state.last_refresh or os.time() - driver.driver_state.last_refresh > config.REFRESH_TICK then
+            cmd = {type = 'refresh'}
+        else
+            cmd = {type = 'ping'}
+        end
+    end
+    return command_handlers['handle_'..cmd.type..'_command'](driver, cmd.device, cmd.command)
+end
+
 function command_handlers.do_scene(driver, device, command)
-    log.info("Sending exec command to "..device.label)
+    local name = nil
+    local id = nil
+    if type(device) == 'table' then
+        name = device.label
+        id = discovery.extract_id(device.device_network_id)
+    else
+        name = device
+        id = device
+    end
+    log.info("Sending exec command to "..name)
     local hub = assert(driver.hub)
     local success = false
     if hub then
-        local id = discovery.extract_id(device.device_network_id)
         success = hub:execute_scene(id)
     end
     if success then
@@ -37,7 +74,16 @@ function command_handlers.do_scene(driver, device, command)
 end
 
 function command_handlers.do_shade(driver, device, command)
-    log.info("Sending "..command.command.." command to "..device.label)
+    local name = nil
+    local id = nil
+    if type(device) == 'table' then
+        name = device.label
+        id = discovery.extract_id(device.device_network_id)
+    else
+        name = device
+        id = device
+    end
+    log.info("Sending "..command.command.." command to "..name)
     local hub = assert(driver.hub)
     local success = false
     local level = nil
@@ -52,7 +98,6 @@ function command_handlers.do_shade(driver, device, command)
     end
     local state = get_shade_state(level)
     if hub then
-        local id = discovery.extract_id(device.device_network_id)
         success = hub:move_shade(id, level)
     end
     if success then   
@@ -86,13 +131,22 @@ function command_handlers.handle_shade_command(driver, device, command)
     return retry_enabled_command('shade', driver, device, command)
 end
 
-function command_handlers.handle_refresh(driver)
+function command_handlers.handle_ping_command(driver)
+    log.info("Pinging hub...")
+    return assert(driver.hub):ping()
+end
+
+function command_handlers.handle_refresh_command(driver)
     log.info("Refreshing shades...")
     local shade_model = discovery.get_model('shade')
 
     local hub = assert(driver.hub)
+    if not hub.ip then
+        hub:discover()
+    end
     local shades, rooms, scenes = hub:update()
     if shades and next(shades) ~= nil then
+        driver.driver_state.last_refresh = os.time()
         local devices = driver:get_devices()
         for _, each in ipairs(devices) do
             if shade_model == each.model then

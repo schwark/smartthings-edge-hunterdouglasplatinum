@@ -12,11 +12,12 @@ local function setup_timer(driver)
   local success = false
   if not driver.driver_state.timer then
     local timer = driver:call_on_schedule(
-      config.SCHEDULE_PERIOD,
+      config.COMMAND_TICK,
       function ()
-          return commands.handle_refresh(driver)
+        return commands.exec_queued_command(driver)
+        --return commands.handle_refresh_command(driver)
       end,
-      'Refresh schedule')
+      'exec schedule')
     if(driver.driver_state.timer) then -- someone else got there first
       driver:cancel_timer(timer)
     elseif timer then 
@@ -42,6 +43,7 @@ end
 
 local driver = Driver("Hunter Douglas Platinum Shades", {
     driver_state = {},
+    mq = {},
     hub = PlatinumGateway(),
     setup_timer = setup_timer,
     clear_timer = clear_timer,
@@ -56,23 +58,23 @@ local driver = Driver("Hunter Douglas Platinum Shades", {
     },    
     capability_handlers = {
       [capabilities.windowShade.ID] = {
-        [capabilities.windowShade.commands.open.NAME] = commands.handle_shade_command,
-        [capabilities.windowShade.commands.close.NAME] = commands.handle_shade_command,
+        [capabilities.windowShade.commands.open.NAME] = commands.add_shade_command,
+        [capabilities.windowShade.commands.close.NAME] = commands.add_shade_command,
       },
       [capabilities.windowShadeLevel.ID] = {
-        [capabilities.windowShadeLevel.commands.setShadeLevel.NAME] = commands.handle_shade_command,
+        [capabilities.windowShadeLevel.commands.setShadeLevel.NAME] = commands.add_shade_command,
       },
       [capabilities.switch.ID] = {
-        [capabilities.switch.commands.on.NAME] = commands.handle_scene_command,
-        [capabilities.switch.commands.off.NAME] = commands.handle_scene_command,
+        [capabilities.switch.commands.on.NAME] = commands.add_scene_command,
+        [capabilities.switch.commands.off.NAME] = commands.add_scene_command,
       },
       [capabilities.refresh.ID] = {
-        [capabilities.refresh.commands.refresh.NAME] = commands.handle_refresh,
+        [capabilities.refresh.commands.refresh.NAME] = commands.add_refresh_command,
       }
     }
   })
 
-
+--driver:custom_startup()
 --------------------
 -- Initialize Driver
 driver:run()
